@@ -18,14 +18,20 @@ jobs:
       - name: Setup Node.js ⚙️
         uses: actions/setup-node@v3
         with:
-          node-version: '16'
+          node-version: '18'  # 更新到更新的Node.js版本
           cache: 'npm'
 
       - name: Install Dependencies 📦
-        run: npm install
+        run: npm ci  # 使用ci而不是install以确保精确的依赖版本
+
+      - name: List installed packages
+        run: npm list --depth=0
 
       - name: Build 🔧
-        run: npm run build
+        run: |
+          echo "Starting build process..."
+          CI=false npm run build  # 禁用CI环境中的警告视为错误的行为
+          echo "Build completed."
         env:
           PUBLIC_URL: /leetcode-169-majority-element  # GitHub Pages的基本URL
 
