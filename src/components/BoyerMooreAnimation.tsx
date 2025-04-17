@@ -46,6 +46,15 @@ const float = keyframes`
   }
 `;
 
+// 定义颜色常量，统一管理颜色
+const COLORS = {
+  CURRENT: "#FFC107", // 黄色 - 当前处理的元素
+  CANDIDATE: "#9C27B0", // 紫色边框 - 候选值
+  CANDIDATE_MATCH: "#4CAF50", // 绿色 - 与候选值匹配的元素
+  NON_MATCH: "#F44336", // 红色 - 与候选值不匹配的元素
+  NEUTRAL: "#BBBBBB", // 灰色 - 未处理或中立状态
+};
+
 const Container = styled.div`
   display: flex;
   width: 100%;
@@ -70,6 +79,34 @@ const CodePanel = styled.div`
   display: flex;
   flex-direction: column;
   overflow: hidden;
+`;
+
+// 添加颜色图例组件样式
+const Legend = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0;
+  justify-content: center;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 8px;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+`;
+
+const LegendItem = styled.div`
+  display: flex;
+  align-items: center;
+  margin-right: 10px;
+`;
+
+const ColorBox = styled.div<{ color: string }>`
+  width: 15px;
+  height: 15px;
+  margin-right: 5px;
+  background-color: ${props => props.color};
+  border-radius: 3px;
 `;
 
 const Controls = styled.div`
@@ -277,41 +314,80 @@ const BoyerMooreAnimation: React.FC<Props> = ({ nums: initialNums }) => {
       });
 
       nums.forEach((num, index) => {
-        const elements: ArrayElement[] = nums.map((value, i) => ({
-          value,
-          index: i,
-          isCurrent: i === index,
-          isCandidateMatch: value === candidate
-        }));
-
+        // 先处理当前元素标记和描述
         let codeLine = 0;
         let description = "";
+        let newCandidate = candidate;
+        let newCount = count;
         
+        // 创建数组元素，计算出每个元素的状态
+        const elements: ArrayElement[] = nums.map((value, i) => {
+          const isCurrent = i === index;
+
+          // 根据实际逻辑确定元素是否匹配候选值
+          // 对于当前处理的元素，需要按照处理逻辑确定其匹配状态
+          let isCandidateMatch = false;
+          
+          if (i < index) {
+            // 已处理的元素，根据最终候选值确定颜色
+            isCandidateMatch = value === candidate;
+          } else if (i === index) {
+            // 当前元素，暂时未确定匹配状态
+            // 将在下面的处理逻辑中设置
+            isCandidateMatch = false;
+          } else {
+            // 未处理的元素，保持中性色
+            isCandidateMatch = false;
+          }
+          
+          return {
+            value,
+            index: i,
+            isCurrent,
+            isCandidateMatch
+          };
+        });
+
+        // 处理计数逻辑
         if (count === 0) {
           // 当计数器为0时，设置新的候选值
           description = `当前正在处理元素 ${num}（黄色标记）。\n计数器count为0，将当前元素 ${num} 设为新的候选值candidate。\n现在candidate = ${num}, count = 1。`;
-          candidate = num;
-          count = 1;
+          newCandidate = num;
+          newCount = 1;
           codeLine = 6; // if (count === 0) { ... }
+          
+          // 当前元素变为候选值
+          elements[index].isCandidateMatch = true;
         } else if (num === candidate) {
           // 当前元素与候选值相同，计数器加1
-          count += 1;
-          description = `当前正在处理元素 ${num}（黄色标记）。\n由于元素值等于当前候选值 ${candidate}，计数器count加1。\n现在candidate = ${candidate}, count = ${count}。`;
+          newCount = count + 1;
+          description = `当前正在处理元素 ${num}（黄色标记）。\n由于元素值等于当前候选值 ${candidate}，计数器count加1。\n现在candidate = ${candidate}, count = ${newCount}。`;
           codeLine = 8; // count += (num === candidate) ? 1 : -1;
+          
+          // 当前元素与候选值匹配
+          elements[index].isCandidateMatch = true;
         } else {
           // 当前元素与候选值不同，计数器减1
-          count -= 1;
-          description = `当前正在处理元素 ${num}（黄色标记）。\n由于元素值不等于当前候选值 ${candidate}，计数器count减1。\n现在candidate = ${candidate}, count = ${count}。`;
+          newCount = count - 1;
+          description = `当前正在处理元素 ${num}（黄色标记）。\n由于元素值不等于当前候选值 ${candidate}，计数器count减1。\n现在candidate = ${candidate}, count = ${newCount}。`;
           codeLine = 8; // count += (num === candidate) ? 1 : -1;
+          
+          // 当前元素与候选值不匹配
+          elements[index].isCandidateMatch = false;
         }
 
+        // 保存这一步的状态
         newSteps.push({
           elements,
-          candidate,
-          count,
+          candidate: newCandidate,
+          count: newCount,
           codeLine,
           description
         });
+        
+        // 更新状态为下一步做准备
+        candidate = newCandidate;
+        count = newCount;
       });
       
       // 最终状态 - 突出显示所有匹配的元素
@@ -366,22 +442,23 @@ const BoyerMooreAnimation: React.FC<Props> = ({ nums: initialNums }) => {
         return `translate(${x}, ${containerHeight/3})`;
       });
 
-    // 添加矩形背景
+    // 添加矩形背景 - 使用统一的颜色常量
     elements.append("rect")
       .attr("width", elementWidth)
       .attr("height", elementHeight)
       .attr("rx", 5)
       .attr("fill", d => {
         if (d.isCurrent) {
-          return "#FFC107"; // 当前元素为金色
-        } else if (d.isCandidateMatch) {
-          return "#4CAF50"; // 匹配元素为绿色
+          return COLORS.CURRENT; // 当前元素为黄色
+        } else if (d.value === steps[currentStep].candidate) {
+          // 如果值等于当前候选值
+          return COLORS.CANDIDATE_MATCH; // 匹配元素为绿色
         } else {
-          return "#F44336"; // 不匹配元素为红色
+          return COLORS.NON_MATCH; // 不匹配元素为红色
         }
       })
       .attr("opacity", d => d.isCurrent ? 1 : 0.8)
-      .attr("stroke", d => d.value === steps[currentStep].candidate ? "#9C27B0" : "none")
+      .attr("stroke", d => d.value === steps[currentStep].candidate ? COLORS.CANDIDATE : "none")
       .attr("stroke-width", 3);
 
     // 添加数字文本
@@ -400,7 +477,7 @@ const BoyerMooreAnimation: React.FC<Props> = ({ nums: initialNums }) => {
       .attr("d", `M${elementWidth/2 - 10},${elementHeight + 5} L${elementWidth/2},${elementHeight + 15} L${elementWidth/2 + 10},${elementHeight + 5}`)
       .attr("fill", "#FFC107");
 
-    // 计数器可视化
+    // 计数器可视化 - 使用统一的颜色常量
     const countValue = steps[currentStep].count;
     const maxBarHeight = containerHeight / 3;
     const barHeight = Math.min(Math.abs(countValue) * 15, maxBarHeight);
@@ -411,7 +488,7 @@ const BoyerMooreAnimation: React.FC<Props> = ({ nums: initialNums }) => {
       .attr("y", countValue >= 0 ? barY - barHeight : barY)
       .attr("width", 30)
       .attr("height", barHeight || 2) // 至少2px高度，确保0值可见
-      .attr("fill", countValue > 0 ? "#4CAF50" : countValue < 0 ? "#F44336" : "#FFC107");
+      .attr("fill", countValue > 0 ? COLORS.CANDIDATE_MATCH : countValue < 0 ? COLORS.NON_MATCH : COLORS.CURRENT);
     
     svgContainer.append("line")
       .attr("x1", containerWidth - 80)
@@ -491,35 +568,47 @@ const BoyerMooreAnimation: React.FC<Props> = ({ nums: initialNums }) => {
 
   const handleInputSubmit = () => {
     try {
+      let rawInput = inputValue.trim();
+      
+      // 尝试处理非严格JSON格式，如 [2, 2, 1, 1, 1, 2, 2] 或 2, 2, 1, 1, 1, 2, 2
+      if (!rawInput.startsWith('[')) {
+        rawInput = `[${rawInput}]`;
+      }
+      
       // 解析输入的数组
-      const newNums = JSON.parse(inputValue);
+      const newNums = JSON.parse(rawInput);
       if (Array.isArray(newNums) && newNums.every(num => typeof num === 'number')) {
-        setNums(newNums);
+        // 限制数组长度，避免性能问题
+        const limitedArray = newNums.slice(0, 15);
+        setNums(limitedArray);
+        if (limitedArray.length < newNums.length) {
+          alert('数组太长，已截取前15个元素进行演示');
+        }
       } else {
         alert('请输入有效的数字数组，例如: [2, 2, 1, 1, 1, 2, 2]');
       }
     } catch (e) {
-      alert('请输入有效的JSON数组，例如: [2, 2, 1, 1, 1, 2, 2]');
+      alert('请输入有效的数组格式，例如: [2, 2, 1, 1, 1, 2, 2] 或 2, 2, 1, 1, 1, 2, 2');
     }
   };
 
   const handleRandomArray = () => {
-    // 生成随机数组
-    const length = Math.floor(Math.random() * 10) + 5; // 5-14的随机长度
-    const majorityElement = Math.floor(Math.random() * 10); // 0-9的随机值
-    const majorityCount = Math.floor(length / 2) + 1; // 保证多数元素
+    // 生成更有意义的随机数组
+    const length = Math.floor(Math.random() * 5) + 5; // 5-9的随机长度，避免数组过长
+    const majorityElementValue = Math.floor(Math.random() * 5); // 0-4的随机值
+    const majorityCount = Math.floor(length / 2) + 1; // 保证多数元素超过一半
 
     const randomArray: number[] = [];
     // 添加多数元素
     for (let i = 0; i < majorityCount; i++) {
-      randomArray.push(majorityElement);
+      randomArray.push(majorityElementValue);
     }
-    // 添加其他随机元素
+    // 添加其他随机元素，确保它们不同于多数元素
     for (let i = majorityCount; i < length; i++) {
       let randomNum: number;
       do {
-        randomNum = Math.floor(Math.random() * 10);
-      } while (randomNum === majorityElement);
+        randomNum = Math.floor(Math.random() * 5);
+      } while (randomNum === majorityElementValue);
       randomArray.push(randomNum);
     }
 
@@ -568,6 +657,45 @@ const BoyerMooreAnimation: React.FC<Props> = ({ nums: initialNums }) => {
             <span>{speed}x</span>
           </div>
         </Controls>
+
+        {/* 添加颜色图例说明 */}
+        <Legend>
+          <LegendItem>
+            <ColorBox color={COLORS.CURRENT} />
+            <span>当前处理元素</span>
+          </LegendItem>
+          <LegendItem>
+            <ColorBox color={COLORS.CANDIDATE_MATCH} />
+            <span>与候选值匹配</span>
+          </LegendItem>
+          <LegendItem>
+            <ColorBox color={COLORS.NON_MATCH} />
+            <span>与候选值不匹配</span>
+          </LegendItem>
+          <LegendItem>
+            <div style={{ width: '15px', height: '15px', marginRight: '5px', border: `2px solid ${COLORS.CANDIDATE}`, borderRadius: '3px' }}></div>
+            <span>当前候选值</span>
+          </LegendItem>
+        </Legend>
+
+        {/* 添加操作指引 */}
+        {currentStep === 0 && (
+          <div style={{ 
+            textAlign: 'center', 
+            margin: '10px 0', 
+            padding: '8px', 
+            background: '#E3F2FD', 
+            borderRadius: '4px',
+            color: '#0D47A1'
+          }}>
+            <p style={{ margin: '0 0 5px 0' }}>
+              <strong>👆 点击按钮开始演示，或使用上面的控制按钮逐步查看</strong>
+            </p>
+            <p style={{ margin: '0', fontSize: '13px' }}>
+              可以尝试输入自定义数组或生成随机数组来测试不同情况
+            </p>
+          </div>
+        )}
 
         <SVGContainer>
           <svg ref={svgRef} width="100%" height="100%" />
